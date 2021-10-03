@@ -1,9 +1,11 @@
 import requests
 import PySimpleGUI as sg
+import json
 
 
 layout = [
         [ sg.Text("Dashboard") ],
+        [ sg.Text("Data: ", size=(53, 5), key="-DATA-") ],
         [ sg.Button("Create Room") ]
     ]
 
@@ -19,6 +21,7 @@ while True:
     if event == "Create Room":
         r = requests.get('http://localhost:3000/room/create')
         msg = r.json()['msg']
+        window['-DATA-'].update("DATA: " + json.dumps(r.json()))
         sg.popup(msg)
 
 window.close()
