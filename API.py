@@ -57,8 +57,8 @@ class API:
         return self._getData(r, 'messages')
 
 
-    def messageSend(self, id, username):
-        data = {'username': username, 'message': 'Hello from python'}
+    def messageSend(self, id, username, message):
+        data = {'username': username, 'message': message}
         r = requests.post(f'{self.baseUrl}/message/send/{id}', json=data)
 
         return self._getData(r, 'messages')
@@ -66,12 +66,14 @@ class API:
 
 if __name__ == "__main__":
     api = API()
-    # roomId = '3e650f2a-2615-4be8-b992-96273e172e32'
-    # username = 'jane doe'
+    username = 'jane doe'
+    # roomCreateRes = api.roomCreate()
+    # roomId = roomCreateRes['room.id']
+    roomId = 'd45dbf39-e702-4007-a035-8bab3ceb80fd'
 
-    # print(api.roomCreate())
-    # print(api.roomGetAll())
-    # print(api.roomGet(roomId))
-    # print(api.roomJoin(roomId, username))
-    # print(api.messageGetAll(roomId, username))
-    # print(api.messageSend(roomId, username))
+    # print(roomCreateRes)
+    print(api.roomGetAll())
+    print(api.roomGet(roomId))
+    print(api.roomJoin(roomId, username))
+    print(api.messageGetAll(roomId, username))
+    print(api.messageSend(roomId, username, 'Hello from python2'))
