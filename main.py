@@ -6,14 +6,20 @@ from API import API
 
 class Main:
     def __init__(self):
+        self.waiting = False
+        self.receiveMessages = False
+        self.receiveMessagesList = []
         self.API = API()
         self.username = ''
+        self.roomLink = ''
+        self.id = ''
         # keys
         self.layoutKeys = [
             {'name': '-COL1-', 'keys': [], 'callback': None}, # main menu
-            {'name': '-COL2-', 'keys': [], 'callback': self.messagesCB}, # messages
+            {'name': '-COL2-', 'keys': [], 'callback': None}, # messages
             {'name': '-COL3-', 'keys': [], 'callback': None},  # input room id
-            {'name': '-COL4-', 'keys': [], 'callback': None}  # input username
+            {'name': '-COL4-', 'keys': [], 'callback': None},  # input username
+            {'name': '-COL5-', 'keys': [], 'callback': self.waitingCB}  # waiting
         ]
 
         # main menu -COL1-
@@ -30,7 +36,7 @@ class Main:
             [sg.Text('Room ID:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-ROOMID-')],
             [sg.Text('Messages:', size=(40, 1))],
             [sg.Output(size=(110, 20), font=('Helvetica 10'), key='-OUT-')],
-            [sg.Multiline(default_text='hi', size=(70, 5), enter_submits=False, key='-QUERY-', do_not_clear=False),
+            [sg.Multiline(default_text='hi', size=(70, 5), enter_submits=False, key='-QUERY-', do_not_clear=True),
             sg.Button('SEND', button_color=(sg.YELLOWS[0], sg.BLUES[0]), bind_return_key=True),
             sg.Button('BACK', key=self.registerLayoutKey('-Back Messages-', '-COL1-'), button_color=(sg.YELLOWS[0], sg.GREENS[0]))]
         ]
@@ -49,6 +55,13 @@ class Main:
             [sg.Button('Submit', key='-Submit Username-'), sg.Button('Cancel', key=self.registerLayoutKey('-Cancel Username-', '-COL1-'))]
         ]
 
+        self.layout5 = [
+            [sg.Text('Room Link:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-WAITINGROOMLINK-')],
+            [sg.Text('Room ID:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-WAITINGROOMID-')],
+            [sg.Text('Waiting for a user to join...')],
+            [sg.Button('Cancel', key=self.registerLayoutKey('-Cancel Waiting-', '-COL1-'))]
+        ]
+
         # main layout
         self.layout = [
             [
@@ -56,17 +69,53 @@ class Main:
                 sg.Column(self.layout2, visible=False, key=self.layoutKeys[1]['name']),
                 sg.Column(self.layout3, visible=False, key=self.layoutKeys[2]['name']),
                 sg.Column(self.layout4, visible=False, key=self.layoutKeys[3]['name']),
+                sg.Column(self.layout5, visible=False, key=self.layoutKeys[4]['name']),
             ]
         ]
 
 
     # callbacks
-    def messagesCB(self):
+    def waitingCB(self):
+        self.waiting = True
+        # crete room
         result = self.API.roomCreate()
+        self.roomLink = result['link']
+        self.roomId = result['room.id']
+
+        # join room
+        self.API.roomJoin(self.roomId, self.username)
 
         self.window['-USERNAME-'].update(self.username)
-        self.window['-ROOMLINK-'].update(result['link'])
-        self.window['-ROOMID-'].update(result['room.id'])
+        self.window['-ROOMLINK-'].update(self.roomLink)
+        self.window['-ROOMID-'].update(self.roomId)
+        self.window['-WAITINGROOMLINK-'].update(self.roomLink)
+        self.window['-WAITINGROOMID-'].update(self.roomId)
+
+
+    def checkIfRoomReady(self):
+        result = self.API.roomGet(self.roomId)
+        if (len(result.get('room', {}).get('users')) > 1):
+            self.waiting = False
+            self.switchLayout('-COL2-')
+            self.receiveMessages = True
+
+
+    def refreshMessages(self):
+        result = self.API.messageGetAll(self.roomId)
+
+        if (result.get('messages')):
+            for message in result.get('messages'):
+                messageId = message.get('id')
+                if not messageId in self.receiveMessagesList:
+                    self.receiveMessagesList.append(messageId)
+                    username = message.get('username')
+                    message = message.get('message')
+                    print(f'{username}: {message}')
+
+
+    def sendMessage(self, message):
+        result = self.API.messageSend(self.roomId, self.username, message)
+        sg.Print(result)
 
 
     def registerLayoutKey(self, key, layoutName):
@@ -101,10 +150,23 @@ class Main:
         # self.window.Element('-OUT-')._TKOut.output.bind("<Key>", lambda e: "break") # make output read-only
 
         while True:
-            event, values = self.window.read()
+            event, values = self.window.read(timeout=1000)
 
             if event in (sg.WIN_CLOSED, 'EXIT'): # quit if exit button or X
                 break
+
+            if event == '-Cancel Waiting-':
+                self.waiting = False
+
+            if self.waiting:
+                self.checkIfRoomReady()
+
+            if event == '-Back Messages-':
+                self.receiveMessages = False
+                self.receiveMessagesList = []
+
+            if self.receiveMessages:
+                self.refreshMessages()
 
             layoutName = self.searchEventLayoutName(event)
             if layoutName:
@@ -116,7 +178,7 @@ class Main:
                     sg.Popup('Username cannot be empty')
                 else:
                     self.username = inputUsername
-                    self.switchLayout('-COL2-')
+                    self.switchLayout('-COL5-')
 
             if event == '-Submit Room ID-':
                 inputRoomId = values[0]
@@ -124,8 +186,8 @@ class Main:
 
             if event == 'SEND':
                 query = values['-QUERY-'].rstrip()
-                # EXECUTE YOUR COMMAND HERE
-                print('The command you entered was {}'.format(query), flush=True)
+                self.window['-QUERY-'].update('')
+                self.sendMessage(query)
 
         self.window.close()
 

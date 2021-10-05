@@ -37,29 +37,28 @@ class API:
         return self._getData(r, 'rooms')
 
 
-    def roomGet(self, id):
-        r = requests.get(f'{self.baseUrl}/room/get/{id}')
+    def roomGet(self, roomId):
+        r = requests.get(f'{self.baseUrl}/room/get/{roomId}')
 
         return self._getData(r, 'room')
 
 
-    def roomJoin(self, id, username):
+    def roomJoin(self, roomId, username):
         data = {'username': username}
-        r = requests.post(f'{self.baseUrl}/room/join/{id}', json=data)
+        r = requests.post(f'{self.baseUrl}/room/join/{roomId}', json=data)
 
         return self._getData(r, 'room')
 
 
-    def messageGetAll(self, id, username):
-        data = {'username': username}
-        r = requests.get(f'{self.baseUrl}/message/get/{id}', json=data)
+    def messageGetAll(self, roomId):
+        r = requests.get(f'{self.baseUrl}/message/get/{roomId}')
 
         return self._getData(r, 'messages')
 
 
-    def messageSend(self, id, username, message):
+    def messageSend(self, roomId, username, message):
         data = {'username': username, 'message': message}
-        r = requests.post(f'{self.baseUrl}/message/send/{id}', json=data)
+        r = requests.post(f'{self.baseUrl}/message/send/{roomId}', json=data)
 
         return self._getData(r, 'messages')
 
@@ -75,5 +74,5 @@ if __name__ == "__main__":
     print(api.roomGetAll())
     print(api.roomGet(roomId))
     print(api.roomJoin(roomId, username))
-    print(api.messageGetAll(roomId, username))
+    print(api.messageGetAll(roomId))
     print(api.messageSend(roomId, username, 'Hello from python2'))
