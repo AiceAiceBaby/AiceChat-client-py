@@ -6,17 +6,19 @@ from API import API
 
 class Main:
     def __init__(self):
+        self.API = API()
+        self.hosting = False
+        self.joining = False
         self.waiting = False
         self.receiveMessages = False
         self.receiveMessagesList = []
-        self.API = API()
         self.username = ''
         self.roomLink = ''
         self.id = ''
         # keys
         self.layoutKeys = [
-            {'name': '-COL1-', 'keys': [], 'callback': None}, # main menu
-            {'name': '-COL2-', 'keys': [], 'callback': None}, # messages
+            {'name': '-COL1-', 'keys': [], 'callback': self.mainMenuCB}, # main menu
+            {'name': '-COL2-', 'keys': [], 'callback': self.messagesCB}, # messages
             {'name': '-COL3-', 'keys': [], 'callback': None},  # input room id
             {'name': '-COL4-', 'keys': [], 'callback': None},  # input username
             {'name': '-COL5-', 'keys': [], 'callback': self.waitingCB}  # waiting
@@ -25,7 +27,7 @@ class Main:
         # main menu -COL1-
         self.layout1 = [
             [sg.Button('Create Room', key=self.registerLayoutKey('-Create Room-', '-COL4-'))],
-            [sg.Button('Join Room', key=self.registerLayoutKey('-Join Room-', '-COL3-'))],
+            [sg.Button('Join Room', key=self.registerLayoutKey('-Join Room-', '-COL4-'))],
             [sg.Button('EXIT')]
         ]
 
@@ -36,7 +38,7 @@ class Main:
             [sg.Text('Room ID:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-ROOMID-')],
             [sg.Text('Messages:', size=(40, 1))],
             [sg.Output(size=(110, 20), font=('Helvetica 10'), key='-OUT-')],
-            [sg.Multiline(default_text='hi', size=(70, 5), enter_submits=False, key='-QUERY-', do_not_clear=True),
+            [sg.Multiline(size=(70, 5), enter_submits=True, key='-QUERY-', do_not_clear=True),
             sg.Button('SEND', button_color=(sg.YELLOWS[0], sg.BLUES[0]), bind_return_key=True),
             sg.Button('BACK', key=self.registerLayoutKey('-Back Messages-', '-COL1-'), button_color=(sg.YELLOWS[0], sg.GREENS[0]))]
         ]
@@ -75,6 +77,21 @@ class Main:
 
 
     # callbacks
+    def mainMenuCB(self):
+        self.hosting = False
+        self.joining = False
+        self.waiting = False
+        self.receiveMessages = False
+        self.receiveMessagesList = []
+
+
+    def messagesCB(self):
+        self.receiveMessages = True
+        self.window['-USERNAME-'].update(self.username)
+        self.window['-ROOMLINK-'].update(self.roomLink)
+        self.window['-ROOMID-'].update(self.roomId)
+
+
     def waitingCB(self):
         self.waiting = True
         # crete room
@@ -85,9 +102,6 @@ class Main:
         # join room
         self.API.roomJoin(self.roomId, self.username)
 
-        self.window['-USERNAME-'].update(self.username)
-        self.window['-ROOMLINK-'].update(self.roomLink)
-        self.window['-ROOMID-'].update(self.roomId)
         self.window['-WAITINGROOMLINK-'].update(self.roomLink)
         self.window['-WAITINGROOMID-'].update(self.roomId)
 
@@ -97,7 +111,6 @@ class Main:
         if (len(result.get('room', {}).get('users')) > 1):
             self.waiting = False
             self.switchLayout('-COL2-')
-            self.receiveMessages = True
 
 
     def refreshMessages(self):
@@ -115,7 +128,6 @@ class Main:
 
     def sendMessage(self, message):
         result = self.API.messageSend(self.roomId, self.username, message)
-        sg.Print(result)
 
 
     def registerLayoutKey(self, key, layoutName):
@@ -145,6 +157,17 @@ class Main:
         return None
 
 
+    def joinRoom(self, roomId):
+        result = self.API.roomJoin(roomId, self.username)
+        if result.get('success') == False:
+            sg.Popup(result.get('msg'))
+            return
+
+        self.roomLink = result['link']
+        self.roomId = result['room.id']
+        self.switchLayout('-COL2-')
+
+
     def run(self):
         self.window = sg.Window('Aice Chat', self.layout, default_button_element_size=(8,2), use_default_focus=False, finalize=False)
         # self.window.Element('-OUT-')._TKOut.output.bind("<Key>", lambda e: "break") # make output read-only
@@ -154,6 +177,12 @@ class Main:
 
             if event in (sg.WIN_CLOSED, 'EXIT'): # quit if exit button or X
                 break
+
+            if event == '-Create Room-':
+                self.hosting = True
+
+            if event == '-Join Room-':
+                self.joining = True
 
             if event == '-Cancel Waiting-':
                 self.waiting = False
@@ -178,11 +207,17 @@ class Main:
                     sg.Popup('Username cannot be empty')
                 else:
                     self.username = inputUsername
-                    self.switchLayout('-COL5-')
+                    if self.hosting:
+                        self.switchLayout('-COL5-')
+                    elif self.joining:
+                        self.switchLayout('-COL3-')
 
             if event == '-Submit Room ID-':
                 inputRoomId = values[0]
-                pass
+                if inputRoomId == '':
+                    sg.Popup('Room ID cannot be empty')
+                else:
+                    self.joinRoom(inputRoomId)
 
             if event == 'SEND':
                 query = values['-QUERY-'].rstrip()

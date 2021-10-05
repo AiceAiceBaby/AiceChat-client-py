@@ -47,7 +47,7 @@ class API:
         data = {'username': username}
         r = requests.post(f'{self.baseUrl}/room/join/{roomId}', json=data)
 
-        return self._getData(r, 'room')
+        return self._getData(r, 'room', 'link', 'room.id')
 
 
     def messageGetAll(self, roomId):
