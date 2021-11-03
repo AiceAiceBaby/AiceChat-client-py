@@ -1,9 +1,13 @@
 import requests
 import json
+import sys
 
 class API:
     def __init__(self):
-        self.baseUrl = 'http://localhost:3000'
+        if "--production" in sys.argv:
+            self.baseUrl = 'https://aice-chat.herokuapp.com'
+        else:
+            self.baseUrl = 'http://localhost:4000'
 
 
     def _getData(self, req, *args):

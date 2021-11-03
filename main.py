@@ -4,6 +4,8 @@ import json
 
 from API import API
 
+terminateKeyword = '--GOODBYE--'
+
 class Main:
     def __init__(self):
         self.API = API()
@@ -123,7 +125,10 @@ class Main:
                     self.receiveMessagesList.append(messageId)
                     username = message.get('username')
                     message = message.get('message')
-                    print(f'{username}: {message}')
+                    if message == terminateKeyword:
+                        print(f'{username} possibly left the conversation.')
+                    else:
+                        print(f'{username}: {message}')
 
 
     def sendMessage(self, message):
