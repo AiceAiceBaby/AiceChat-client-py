@@ -1,10 +1,11 @@
-import requests
 import PySimpleGUI as sg
-import json
+import os
 
 from API import API
+from RSA import RSAService
 
 terminateKeyword = '--GOODBYE--'
+encryptKeyword = '--ENCRYPTED--'
 
 class Main:
     def __init__(self):
@@ -17,13 +18,15 @@ class Main:
         self.username = ''
         self.roomLink = ''
         self.id = ''
+
         # keys
         self.layoutKeys = [
             {'name': '-COL1-', 'keys': [], 'callback': self.mainMenuCB}, # main menu
             {'name': '-COL2-', 'keys': [], 'callback': self.messagesCB}, # messages
             {'name': '-COL3-', 'keys': [], 'callback': None},  # input room id
             {'name': '-COL4-', 'keys': [], 'callback': None},  # input username
-            {'name': '-COL5-', 'keys': [], 'callback': self.waitingCB}  # waiting
+            {'name': '-COL5-', 'keys': [], 'callback': self.waitingCB},  # waiting
+            {'name': '-COL6-', 'keys': [], 'callback': None}  # settings
         ]
 
         # main menu -COL1-
@@ -35,13 +38,15 @@ class Main:
 
         # messages -COL2-
         self.layout2 = [
-            [sg.Text('Username:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-USERNAME-')],
+            [sg.Text('Username:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-USERNAME-'),
+             sg.Button('settings', button_color=('SkyBlue1', 'dim gray'), key=self.registerLayoutKey('-SETTINGS_BTN-', '-COL6-'))],
             [sg.Text('Room Link:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-ROOMLINK-')],
             [sg.Text('Room ID:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-ROOMID-')],
             [sg.Text('Messages:', size=(40, 1))],
             [sg.Output(size=(110, 20), font=('Helvetica 10'), key='-OUT-')],
-            [sg.Multiline(size=(70, 5), enter_submits=True, key='-QUERY-', do_not_clear=True),
+            [sg.Multiline(size=(70, 5), enter_submits=True, key='-MSG_INPUT-', do_not_clear=True),
             sg.Button('SEND', button_color=(sg.YELLOWS[0], sg.BLUES[0]), bind_return_key=True),
+            sg.Button('SEND (Encrypted)', button_color=(sg.YELLOWS[0], sg.BLUES[0]), key='-SEND_ENCRYPTED-'),
             sg.Button('BACK', key=self.registerLayoutKey('-Back Messages-', '-COL1-'), button_color=(sg.YELLOWS[0], sg.GREENS[0]))]
         ]
 
@@ -59,11 +64,20 @@ class Main:
             [sg.Button('Submit', key='-Submit Username-'), sg.Button('Cancel', key=self.registerLayoutKey('-Cancel Username-', '-COL1-'))]
         ]
 
+        # waiting -COL5-
         self.layout5 = [
             [sg.Text('Room Link:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-WAITINGROOMLINK-')],
             [sg.Text('Room ID:'), sg.InputText('', use_readonly_for_disable=True, disabled=True, size=(60, 1), key='-WAITINGROOMID-')],
             [sg.Text('Waiting for a user to join...')],
             [sg.Button('Cancel', key=self.registerLayoutKey('-Cancel Waiting-', '-COL1-'))]
+        ]
+
+        # settings -COL6-
+        self.layout6 = [
+            [sg.Text('Your private key:'), sg.Text('Other user\'s public key:', pad=(270, 0))],
+            [sg.Multiline('', size=(50, 20), do_not_clear=True, key='-selfPrivateKey-'),
+             sg.Multiline('', size=(50, 20), do_not_clear=True, key='-otherPublickey-')],
+            [sg.Button('BACK', key=self.registerLayoutKey('-Back Settings-', '-COL2-'), button_color=(sg.YELLOWS[0], sg.GREENS[0]))],
         ]
 
         # main layout
@@ -74,6 +88,7 @@ class Main:
                 sg.Column(self.layout3, visible=False, key=self.layoutKeys[2]['name']),
                 sg.Column(self.layout4, visible=False, key=self.layoutKeys[3]['name']),
                 sg.Column(self.layout5, visible=False, key=self.layoutKeys[4]['name']),
+                sg.Column(self.layout6, visible=False, key=self.layoutKeys[5]['name']),
             ]
         ]
 
@@ -124,7 +139,18 @@ class Main:
                 if not messageId in self.receiveMessagesList:
                     self.receiveMessagesList.append(messageId)
                     username = message.get('username')
-                    message = message.get('message')
+                    message: str = message.get('message')
+
+                    # try to decrypt encrypted message
+                    try:
+                        if username != self.username and message.startswith(encryptKeyword):
+                            selfPrivateKey = self.window['-selfPrivateKey-'].get()
+                            message = RSAService.decrypt(selfPrivateKey, message.split(encryptKeyword)[1])
+                    except:
+                        username = 'SYSTEM:'
+                        message = '--THIS MESSAGE IS ENCRYPTED AND CANNOT BE DECRYPTED USING YOUR PRIVATE KEY--'
+
+                    # notice current user if recipient possibly left
                     if message == terminateKeyword:
                         print(f'{username} possibly left the conversation.')
                     else:
@@ -132,7 +158,16 @@ class Main:
 
 
     def sendMessage(self, message):
-        result = self.API.messageSend(self.roomId, self.username, message)
+        self.API.messageSend(self.roomId, self.username, message)
+
+
+    def sendEncryptedMessage(self, message):
+        try:
+            otherPublicKey = self.window['-otherPublickey-'].get()
+            encryptedText = encryptKeyword + RSAService.encrypt(otherPublicKey, message)
+            self.API.messageSend(self.roomId, self.username, encryptedText)
+        except:
+            sg.Popup('There was an error while try to encrypt the message using the public.')
 
 
     def registerLayoutKey(self, key, layoutName):
@@ -174,8 +209,14 @@ class Main:
 
 
     def run(self):
-        self.window = sg.Window('Aice Chat', self.layout, default_button_element_size=(8,2), use_default_focus=False, finalize=False)
-        # self.window.Element('-OUT-')._TKOut.output.bind("<Key>", lambda e: "break") # make output read-only
+        self.window = sg.Window('Aice Chat', self.layout, default_button_element_size=(8,2), use_default_focus=False, finalize=True)
+        self.window.Element('-OUT-')._TKOut.output.bind("<Key>", lambda e: "break") # make output read-only
+
+        if (os.path.isfile('./private.pem')):
+            self.window['-selfPrivateKey-'].update(open('./private.pem').read())
+
+        if (os.path.isfile('./public.pem')):
+            self.window['-otherPublickey-'].update(open('./public.pem').read())
 
         while True:
             event, values = self.window.read(timeout=1000)
@@ -196,6 +237,7 @@ class Main:
                 self.checkIfRoomReady()
 
             if event == '-Back Messages-':
+                self.sendMessage(terminateKeyword)
                 self.receiveMessages = False
                 self.receiveMessagesList = []
 
@@ -225,9 +267,14 @@ class Main:
                     self.joinRoom(inputRoomId)
 
             if event == 'SEND':
-                query = values['-QUERY-'].rstrip()
-                self.window['-QUERY-'].update('')
-                self.sendMessage(query)
+                msg = values['-MSG_INPUT-'].rstrip()
+                self.window['-MSG_INPUT-'].update('')
+                self.sendMessage(msg)
+
+            if event == '-SEND_ENCRYPTED-':
+                msg = values['-MSG_INPUT-'].rstrip()
+                self.window['-MSG_INPUT-'].update('')
+                self.sendEncryptedMessage(msg)
 
         self.window.close()
 
